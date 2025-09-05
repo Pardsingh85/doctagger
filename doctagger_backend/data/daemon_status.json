@@ -1,0 +1,28 @@
+{
+  "94ab59eb-40d6-4fe1-af84-935a1c727386": {
+    "first test": {
+      "last_run": "2025-08-14T20:38:12.242594+00:00",
+      "last_error": null,
+      "files_processed": 0,
+      "last_success": "2025-08-14T20:38:13.115775+00:00"
+    },
+    "real one": {
+      "last_run": "2025-08-14T20:48:14.385645+00:00",
+      "last_error": null,
+      "files_processed": 0,
+      "last_success": "2025-08-14T20:48:15.004827+00:00"
+    },
+    "hkhkh": {
+      "last_run": "2025-08-14T20:48:13.684340+00:00",
+      "last_error": null,
+      "files_processed": 0,
+      "last_success": "2025-08-14T20:48:14.382968+00:00"
+    },
+    "Finance": {
+      "last_run": "2025-08-15T14:04:12.062003+00:00",
+      "last_error": null,
+      "files_processed": 0,
+      "last_success": "2025-08-15T14:04:12.645952+00:00"
+    }
+  }
+}
