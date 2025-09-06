@@ -47,16 +47,17 @@ jobs:
           result-encoding: string
 
       # 4) Deploy the already-built files (skip auto build)
-      - name: Deploy to Azure Static Web Apps (OIDC)
+      - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:
           action: upload
-          app_location: doctagger_ui_frontend   # source root
-          output_location: dist                 # built folder (relative to app_location)
+          app_location: doctagger_ui_frontend
+          output_location: dist
           skip_app_build: true
+          # 👇 use the refreshed secret you updated
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AMBITIOUS_SMOKE_0AA480803 }}
+          # (optional to keep; ignored when a token is provided)
           github_id_token: ${{ steps.oidc.outputs.result }}
-          production_branch: main
-          deployment_environment: Production
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
@@ -66,3 +67,4 @@ jobs:
       - uses: Azure/static-web-apps-deploy@v1
         with:
           action: close
+
