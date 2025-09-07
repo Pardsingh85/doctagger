@@ -3,7 +3,9 @@ import { getAccessToken } from "../auth/getAccessToken";
 
 export default function TestCall() {
   const { instance } = useMsal();
-  const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+ const base = (import.meta.env.VITE_API_BASE || "").trim();
+  if (!base) { alert("VITE_API_BASE not configured"); return; }
+
 
   const callApi = async () => {
     try {

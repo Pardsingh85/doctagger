@@ -12,7 +12,12 @@ export default function useCurrentUser() {
       try {
         const token = await getAccessToken(instance);
         if (!token) return; // redirect in progress
-        const base = import.meta.env.VITE_API_BASE_URL;
+        const base = (import.meta.env.VITE_API_BASE || "").trim();
+        if (!base) {
+          console.warn("VITE_API_BASE not set; skipping /me-jwt");
+          setUser({ name: "Signed in", email: "", isAdmin: false, groups: [] });
+          return;
+        }
         const res = await fetch(`${base}/me-jwt`, {
           headers: { Authorization: `Bearer ${token}` },
         });
