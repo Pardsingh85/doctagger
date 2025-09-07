@@ -41,7 +41,6 @@ jobs:
           VITE_MSAL_TENANT_ID: ${{ vars.VITE_MSAL_TENANT_ID }}
           VITE_MSAL_REDIRECT_URI: ${{ vars.VITE_MSAL_REDIRECT_URI }}
           VITE_MSAL_POST_LOGOUT_REDIRECT_URI: ${{ vars.VITE_MSAL_POST_LOGOUT_REDIRECT_URI }}
-          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
           VITE_API_SCOPE: ${{ vars.VITE_API_SCOPE }}
 
       - name: Include SWA config in artifact
@@ -77,6 +76,7 @@ jobs:
       - uses: Azure/static-web-apps-deploy@v1
         with:
           action: close
+
 
 
 
