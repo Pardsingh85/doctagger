@@ -1,20 +1,15 @@
 import { PublicClientApplication } from "@azure/msal-browser";
 
-export const msalConfig = {
+const msalConfig = {
   auth: {
-    clientId: import.meta.env.VITE_CLIENT_APP_ID,
-    authority: "https://login.microsoftonline.com/organizations",
-    redirectUri: "http://localhost:5173/auth/callback",
-    postLogoutRedirectUri: "http://localhost:5173/",
-    navigateToLoginRequestUrl: false,
+    clientId: import.meta.env.VITE_MSAL_CLIENT_ID,
+    authority: `https://login.microsoftonline.com/${import.meta.env.VITE_MSAL_TENANT_ID}`,
+    redirectUri: import.meta.env.VITE_MSAL_REDIRECT_URI,
+    postLogoutRedirectUri: import.meta.env.VITE_MSAL_POST_LOGOUT_REDIRECT_URI,
   },
-  cache: { cacheLocation: "localStorage", storeAuthStateInCookie: true },
-  system: { allowRedirectInIframe: false },
+  cache: { cacheLocation: "localStorage", storeAuthStateInCookie: false },
 };
-
-export const loginRequest = {
-  scopes: [`api://${import.meta.env.VITE_API_APP_ID}/access_as_user`],
-  prompt: "select_account",
-};
-
 export const msalInstance = new PublicClientApplication(msalConfig);
+export const loginRequest = {
+  scopes: [import.meta.env.VITE_API_SCOPE || "User.Read"],
+};
