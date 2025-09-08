@@ -6,6 +6,8 @@ import AdminUploadTargetsPage from "./pages/AdminUploadTargetsPage";
 import useCurrentUser from "./hooks/useCurrentUser";
 import LoginButton from "./components/LoginButton";
 import AdminConsentCallback from "./pages/AdminConsentCallback";
+import GrantAccessGuide from "./pages/GrantAccessGuide";
+
 
 function App() {
   const { user, error } = useCurrentUser();
@@ -33,6 +35,7 @@ function App() {
           <Link to="/dashboard" className="text-blue-600 hover:underline">Dashboard</Link>
           {isAdmin && (
             <>
+            <Link to="/admin/grant-access" className="text-blue-600 hover:underline">Grant Access</Link>
               <Link to="/admin" className="text-blue-600 hover:underline">Admin</Link>
               <Link to="/admin/upload-targets" className="text-blue-600 hover:underline">Upload Targets</Link>
             </>
@@ -52,8 +55,12 @@ function App() {
         <Route path="/admin/upload-targets" element={<AdminUploadTargetsPage />} />
         <Route path="/" element={<Navigate to="/dashboard" />} />
         <Route path="/auth/admin-consent/callback" element={<AdminConsentCallback />} />
-
+        
         {/* Admin page routing, secured based on isAdmin */}
+        <Route
+          path="/admin/grant-access"
+          element={isAdmin ? <GrantAccessGuide /> : <Navigate to="/dashboard" />}
+        />
         <Route
           path="/admin"
           element={
