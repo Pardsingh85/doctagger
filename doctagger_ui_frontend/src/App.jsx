@@ -35,18 +35,15 @@ function App() {
           <Link to="/dashboard" className="text-blue-600 hover:underline">Dashboard</Link>
           {isAdmin && (
             <>
-            <Link to="/admin/grant-access" className="text-blue-600 hover:underline">Grant Access</Link>
+              <Link to="/admin/grant-access" className="text-blue-600 hover:underline">Grant Access</Link>
               <Link to="/admin" className="text-blue-600 hover:underline">Admin</Link>
               <Link to="/admin/upload-targets" className="text-blue-600 hover:underline">Upload Targets</Link>
             </>
           )}
         </div>
-          <div className="flex items-center gap-3 text-sm text-gray-500">
-           {user && <>Logged in as: {user.name} ({user.email})</>}
+        <div className="flex items-center gap-3 text-sm text-gray-500">
+          {user && <>Logged in as: {user.name} ({user.email})</>}
           <LoginButton />
-        </div>
-        <div className="text-sm text-gray-500">
-          Logged in as: {user.name} ({user.email})
         </div>
       </nav>
 
