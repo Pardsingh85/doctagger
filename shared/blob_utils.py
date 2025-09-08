@@ -2,6 +2,7 @@ import os
 import json
 from azure.storage.blob import BlobServiceClient
 from datetime import datetime
+from .secrets import get_secret
 
 # ✅ Load .env from project root
 from dotenv import load_dotenv
@@ -9,7 +10,7 @@ from dotenv import load_dotenv
 env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
 load_dotenv(dotenv_path=env_path)
 
-AZURE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+AZURE_CONNECTION_STRING = get_secret("AzureStorage-ConnectionString") or os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 
 def get_blob_client(tenant_id: str, blob_name: str):
     """

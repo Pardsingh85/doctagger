@@ -5,12 +5,14 @@ from docx import Document
 import pdfplumber
 from dotenv import load_dotenv
 from openai import OpenAI  # Requires openai>=1.0.0
+from .secrets import get_secret
 
 # Load .env variables from root (for local dev)
 env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
 load_dotenv(dotenv_path=env_path)
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+api_key = get_secret("OpenAI-ApiKey") or os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=api_key)
 
 def extract_text(uploaded_file):
     """
