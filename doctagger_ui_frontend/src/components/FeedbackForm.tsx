@@ -5,7 +5,7 @@ import { InteractionRequiredAuthError } from "@azure/msal-browser";
 
 // 🔧 Configure these via your frontend .env (see below)
 const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE || "http://localhost:8000";
+  (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:8000";
 const API_SCOPES = [
   // Example: "api://<BACKEND_APP_ID>/user_impersonation"
   (import.meta as any).env?.VITE_API_SCOPE,
