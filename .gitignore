@@ -7,6 +7,9 @@ dist/
 venv/
 .env
 *.env
+.venv*/
+venv*/
+env*/
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -18,3 +21,25 @@ Thumbs.db
 
 # Build artifacts
 coverage/
+
+# Azure Functions local
+bin/
+obj/
+.testFunctions/
+local.settings.json
+
+# Azurite (local emulator files)
+doc_tagger_daemon/__azurite_db_*__
+doc_tagger_daemon/_azurite_*__
+doc_tagger_daemon/AzuriteConfig
+
+# VS Code / logs
+.vscode/
+*.log
+
+# Frontend build/cache
+doctagger_ui_frontend/node_modules/
+doctagger_ui_frontend/dist/
+
+# Copied shared for function deploy (we sync it before publish)
+doc_tagger_daemon/shared/
