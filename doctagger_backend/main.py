@@ -20,7 +20,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "https://ambitious-smoke-0aa480803.2.azurestaticapps.net",
-        "https://app.doctaggerai",  # add when bound
+        "https://app.doctaggerai.com",  # add when bound
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -1,21 +1,21 @@
 import { useMemo } from "react";
 
 export default function GrantAccessGuide() {
-  const apiAppId = import.meta.env.VITE_API_APP_ID as string;
+  const daemonAppId = import.meta.env.VITE_DAEMON_APP_ID as string;
   const prodCallback = `${window.location.origin}/auth/callback`;
 
   const adminConsentUrl = useMemo(
     () =>
-      `https://login.microsoftonline.com/common/adminconsent?client_id=${apiAppId}&redirect_uri=${encodeURIComponent(
+      `https://login.microsoftonline.com/common/adminconsent?client_id=${daemonAppId}&redirect_uri=${encodeURIComponent(
         prodCallback
       )}&state=onboarding`,
-    [apiAppId, prodCallback]
+    [daemonAppId, prodCallback]
   );
 
   const grantJson = `{
   "roles": ["write"],
   "grantedToIdentities": [
-    { "application": { "id": "${apiAppId}" } }
+    { "application": { "id": "${daemonAppId}" } }
   ]
 }`;
 
@@ -39,7 +39,7 @@ export default function GrantAccessGuide() {
           Open Admin Consent
         </a>
         <p className="text-xs mt-2">
-          API App ID: <code>{apiAppId || "MISSING VITE_API_APP_ID"}</code>
+          API App ID: <code>{daemonAppId || "MISSING VITE_DAEMON_APP_ID"}</code>
         </p>
       </section>
 
