@@ -1,0 +1,13 @@
+__pycache__/
+.vscode/
+.venv/
+AzuriteConfig/
+_azurite_db_*
+_blobstorage_/
+_queuestorage_/
+.python_packages/
+local.settings.json
+data/
+pytest_cache/
+.mypy_cache/
+.env

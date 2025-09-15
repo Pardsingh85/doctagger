@@ -1,187 +1,338 @@
-import os
+# daemon_worker.py
+# Clean, import-safe worker for Azure Functions (Python v2).
+# - No side effects at import time
+# - All clients/secrets created at runtime
+# - Simple retry/backoff for Graph HTTP calls
+# - Uses shared/* helpers only inside functions
+
+from __future__ import annotations
+
 import io
-from datetime import datetime
-from dotenv import load_dotenv
-from openai import OpenAI
-import requests
+import os
+import json
+import time
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Callable
+from shared.secrets import get_secret
 
-from shared.blob_utils import append_log_entry, load_json_blob, update_daemon_status
-from shared.tagging_utils import extract_text, get_tags, parse_tags
-from shared.graph_auth import get_graph_token
+# ------------- Helpers (no network at import) ----------------
+
+@dataclass
+class Target:
+    label: str
+    site_id: str
+    drive_id: str
+    folder: str
+    enabled: bool = True
 
 
-# Load .env vars
-load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
-def already_tagged(fields):
-    return fields.get("DocTaggerTags") not in [None, ""]
+def _retryable_request(
+    fn,
+    max_attempts: int = 5,
+    base_sleep: float = 0.8,
+    max_sleep: float = 10.0,
+):
+    """
+    Retry wrapper for transient Graph errors (429/5xx).
+    Respects Retry-After header when present.
+    """
+    import requests  # imported here to avoid top-level side effects
 
-def list_files(site_id, drive_id, folder, token):
-    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{folder}:/children"
-    headers = {"Authorization": f"Bearer {token}"}
-    resp = requests.get(url, headers=headers)
-    if resp.status_code != 200:
-        print(f"[ERROR] Failed to list files: {resp.status_code} → {resp.text}")
-        return []
-    return resp.json().get("value", [])
-
-def get_file_fields(site_id, drive_id, file_id, token):
-    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{file_id}/listItem/fields"
-    headers = {"Authorization": f"Bearer {token}"}
-    resp = requests.get(url, headers=headers)
-    return resp.json() if resp.status_code == 200 else {}
-
-def download_file(site_id, drive_id, file_id, token):
-    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{file_id}/content"
-    headers = {"Authorization": f"Bearer {token}"}
-    resp = requests.get(url, headers=headers)
-    return resp.content if resp.status_code == 200 else None
-
-def patch_metadata(site_id, drive_id, file_id, tags, token):
-    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{file_id}/listItem/fields"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-    payload = {"DocTaggerTags": tags}
-    resp = requests.patch(url, headers=headers, json=payload)
-    if resp.status_code not in (200, 204):
-        print(f"[WARN] Failed to patch metadata: {resp.status_code} → {resp.text}")
-
-def process_target(tenant_id, target):
-    label = target["label"]
-    site_id = target["siteId"]
-    drive_id = target["driveId"]
-    folder = target["folder"]
-
-    print(f"\n=== Processing '{label}' for tenant ===")
-
-    update_daemon_status(tenant_id, label, {
-        "last_run": datetime.utcnow().isoformat() + "Z",
-        "files_processed": 0,
-        "last_error": None
-    })
-
-    try:
-        token = get_graph_token(tenant_id)
-        print(f"[DEBUG] Auth success for tenant")
-    except Exception as e:
-        print(f"[ERROR] Auth failed for tenant")
-        update_daemon_status(tenant_id, label, {
-            "last_error": str(e)
-        })
-        return
-
-    files = list_files(site_id, drive_id, folder, token)
-    print(f"[DEBUG] Found {len(files)} files in '{folder}'")
-
-    processed = 0
-
-    for f in files:
-        if not f.get("file"):
-            continue
-        name = f["name"]
-        file_id = f["id"]
-
-        print(f"[DEBUG] Evaluating file: {name}")
-        fields = get_file_fields(site_id, drive_id, file_id, token)
-
-        if already_tagged(fields):
-            print(f"[SKIP] Already tagged: {name}")
-            continue
-
-        file_bytes = download_file(site_id, drive_id, file_id, token)
-        if not file_bytes:
-            print(f"[WARN] Failed to download {name}")
-            continue
-
-        class DummyFile:
-            def __init__(self, filename, content):
-                self.filename = filename
-                self.file = io.BytesIO(content)
-
-        dummy = DummyFile(name, file_bytes)
-
+    attempt = 0
+    resp: Optional[requests.Response] = None
+    while attempt < max_attempts:
+        attempt += 1
         try:
-            text = extract_text(dummy)
-            raw_tags = get_tags(text[:3000])
-            tags = parse_tags(raw_tags)
+            resp = fn()
+            if resp.status_code < 400 or (400 <= resp.status_code < 500 and resp.status_code != 429):
+                return resp
+        except requests.RequestException:
+            pass  # network error → retry
 
-            patch_metadata(site_id, drive_id, file_id, ", ".join(tags), token)
-            print(f"[OK] Tagged {name}: {tags}")
-            processed += 1
+        # calculate backoff
+        retry_after = 0.0
+        if resp is not None:
+            ra = resp.headers.get("Retry-After")
+            try:
+                retry_after = float(ra) if ra is not None else 0.0
+            except ValueError:
+                retry_after = 0.0
 
-            append_log_entry(tenant_id, {
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "filename": name,
-                "folder": folder,
-                "tags": tags,
-                "user": "daemon@doctagger",
-                "status": "success",
-                "method": "daemon"
-            })
-            print(f"[DEBUG] Logged tagging for {name}")
+        sleep_s = max(retry_after, min(max_sleep, base_sleep * (2 ** (attempt - 1))))
+        time.sleep(sleep_s)
 
-        except Exception as e:
-            print(f"[ERROR] Failed to tag {name}: {e}")
-            update_daemon_status(tenant_id, label, {
-                "last_error": str(e)
-            })
+    # out of attempts → return last resp or raise
+    if resp is None:
+        raise RuntimeError("Request failed after retries with no response object.")
+    return resp
 
-    print(f"[INFO] Done with '{label}' — Files tagged: {processed}")
 
-    update_daemon_status(tenant_id, label, {
-        "last_success": datetime.utcnow().isoformat() + "Z",
-        "files_processed": processed
-    })
+# ------------- Graph IO (created at runtime) -----------------
 
-def load_config(tenant_id):
-    print(f"[DEBUG] Loading upload_targets.json for")
-    return load_json_blob(tenant_id, "upload_targets.json")
+def _graph_get(url: str, token: str) -> Dict[str, Any]:
+    import requests
 
-def get_tenant_ids():
-    # 1) Prefer env var for quick testing
-    csv = os.getenv("DAEMON_TENANTS")  # e.g. "tenantGuid1,tenantGuid2"
-    if csv:
+    def _do():
+        return requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=60)
+
+    resp = _retryable_request(_do)
+    if not resp or resp.status_code >= 400:
+        raise RuntimeError(f"Graph GET failed {resp.status_code if resp else '??'}: {url} :: {getattr(resp, 'text', '')[:2000]}")
+    return resp.json()
+
+
+def _graph_get_bytes(url: str, token: str) -> bytes:
+    import requests
+
+    def _do():
+        return requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=300)
+
+    resp = _retryable_request(_do)
+    if not resp or resp.status_code >= 400:
+        raise RuntimeError(f"Graph GET(bytes) failed {resp.status_code if resp else '??'}: {url}")
+    return resp.content
+
+
+def _graph_patch(url: str, token: str, payload: Dict[str, Any]) -> None:
+    import requests
+
+    def _do():
+        return requests.patch(
+            url,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            data=json.dumps(payload).encode("utf-8"),
+            timeout=60,
+        )
+
+    resp = _retryable_request(_do)
+    if not resp or resp.status_code >= 400:
+        raise RuntimeError(f"Graph PATCH failed {resp.status_code if resp else '??'}: {url} :: {getattr(resp, 'text', '')[:2000]}")
+
+
+# ------------- Business logic (runtime imports) --------------
+
+def _list_files(site_id: str, drive_id: str, folder: str, token: str) -> List[Dict[str, Any]]:
+    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{folder}:/children"
+    data = _graph_get(url, token)
+    return data.get("value", [])
+
+
+def _get_file_fields(site_id: str, drive_id: str, file_id: str, token: str) -> Dict[str, Any]:
+    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{file_id}/listItem/fields"
+    return _graph_get(url, token)
+
+
+def _download_file(site_id: str, drive_id: str, file_id: str, token: str) -> bytes:
+    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{file_id}/content"
+    return _graph_get_bytes(url, token)
+
+
+def _patch_metadata(site_id: str, drive_id: str, file_id: str, tags_csv: str, token: str) -> None:
+    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{file_id}/listItem/fields"
+    _graph_patch(url, token, {"DocTaggerTags": tags_csv})
+
+
+def _already_tagged(fields: Dict[str, Any]) -> bool:
+    value = fields.get("DocTaggerTags")
+    return value not in (None, "")
+
+
+# ------------- Entry points (called by function) -------------
+
+def _load_targets_for_tenant(tenant_id: str) -> List[Target]:
+    # Lazy import shared helpers at runtime
+    from shared.blob_utils import load_json_blob
+
+    cfg = load_json_blob(tenant_id, "upload_targets.json") or []
+    out: List[Target] = []
+    for t in cfg:
+        out.append(
+            Target(
+                label=t.get("label", "Unnamed"),
+                site_id=t["siteId"],
+                drive_id=t["driveId"],
+                folder=t.get("folder", ""),
+                enabled=t.get("enabled", True),
+            )
+        )
+    return out
+
+
+def _get_tenant_ids() -> List[str]:
+    # Prefer env list
+    csv = os.getenv("DAEMON_TENANTS", "")
+    if csv.strip():
         return [t.strip() for t in csv.split(",") if t.strip()]
 
-    # 2) (Optional) Central list in blob: tenants.json -> ["<tid>", ...]
+    # Optional: load from blob (safe fallback)
     try:
-        tenants = load_json_blob("global", "tenants.json")  # adjust container/key if needed
+        from shared.blob_utils import load_json_blob
+        tenants = load_json_blob("global", "tenants.json")
         if isinstance(tenants, list):
-            return tenants
+            return [t for t in tenants if isinstance(t, str) and t.strip()]
     except Exception:
         pass
 
-    print("[WARN] No tenants configured (DAEMON_TENANTS empty, tenants.json not found).")
     return []
 
-def run_daemon():
-    tenant_ids = get_tenant_ids()
-    for tenant_id in tenant_ids:
-        if not tenant_id:
-            print("[SKIP] Invalid tenant_id")
+from openai import OpenAI
+
+def _make_openai_client():
+    # First try Key Vault
+    key = get_secret("OpenAI-ApiKey")
+
+    # Fallback to env var (useful for local dev / quick test)
+    if not key:
+        key = os.getenv("OPENAI_API_KEY")
+
+    if not key:
+        raise RuntimeError("OpenAI API key not set (neither OpenAI-ApiKey in Key Vault nor OPENAI_API_KEY env var)")
+
+    return OpenAI(api_key=key)
+
+
+def _get_graph_token_for_tenant(tenant_id: str) -> str:
+    # Lazy import auth helper
+    from shared.graph_auth import get_graph_token
+    return get_graph_token(tenant_id)
+
+
+def _append_log(tenant_id: str, entry: Dict[str, Any]) -> None:
+    from shared.blob_utils import append_log_entry
+    append_log_entry(tenant_id, entry)
+
+
+def _update_status(tenant_id: str, label: str, patch: Dict[str, Any]) -> None:
+    from shared.blob_utils import update_daemon_status
+    update_daemon_status(tenant_id, label, patch)
+
+
+def _extract_and_tag(client, content_bytes: bytes, filename: str) -> List[str]:
+    """
+    Uses shared.tagging_utils helpers + OpenAI to extract and parse tags.
+    """
+    from shared.tagging_utils import extract_text, get_tags, parse_tags
+
+    class _Dummy:
+        def __init__(self, name: str, data: bytes) -> None:
+            self.filename = name
+            self.file = io.BytesIO(data)
+
+    text = extract_text(_Dummy(filename, content_bytes))
+    raw = get_tags(text[:3000])  # keep prompt size bounded
+    tags = parse_tags(raw)
+    return tags
+
+
+def _process_target(tenant_id: str, target: Target, client) -> int:
+    """
+    Returns number of files successfully tagged for this target.
+    """
+    token = _get_graph_token_for_tenant(tenant_id)
+    logging.info("[tenant=%s] Auth OK for target '%s'", tenant_id, target.label)
+
+    files = _list_files(target.site_id, target.drive_id, target.folder, token)
+    logging.info("[tenant=%s] Found %d files in '%s'", tenant_id, len(files), target.folder)
+
+    processed = 0
+    for f in files:
+        # skip folders
+        if not f.get("file"):
             continue
 
-        print(f"[INFO] Starting processing for tenant: {tenant_id}")
-        try:
-            targets = load_config(tenant_id)
-            if not targets:
-                print(f"[INFO] No upload targets found for tenant: {tenant_id}")
-                continue
+        name = f.get("name", "")
+        fid = f.get("id")
+        if not fid:
+            continue
 
-            for target in targets:
-                if not target.get("enabled", True):
-                    print(f"[SKIP] Target '{target.get('label')}' is disabled (tenant {tenant_id})")
-                    continue
-                process_target(tenant_id, target)
+        try:
+            fields = _get_file_fields(target.site_id, target.drive_id, fid, token)
+        except Exception as e:
+            logging.warning("[tenant=%s] Get fields failed for %s: %s", tenant_id, name, e)
+            continue
+
+        if _already_tagged(fields):
+            logging.info("[tenant=%s] SKIP already tagged: %s", tenant_id, name)
+            continue
+
+        try:
+            blob = _download_file(target.site_id, target.drive_id, fid, token)
+        except Exception as e:
+            logging.warning("[tenant=%s] Download failed for %s: %s", tenant_id, name, e)
+            continue
+
+        try:
+            tags = _extract_and_tag(client, blob, name)
+            tags_csv = ", ".join(tags)
+            _patch_metadata(target.site_id, target.drive_id, fid, tags_csv, token)
+            processed += 1
+
+            _append_log(tenant_id, {
+                "ts": _utc_now_iso(),
+                "filename": name,
+                "folder": target.folder,
+                "tags": tags,
+                "user": "daemon@doctagger",
+                "status": "success",
+                "method": "daemon",
+            })
+            logging.info("[tenant=%s] OK tagged %s -> %s", tenant_id, name, tags)
 
         except Exception as e:
-            print(f"[ERROR] Failed to process tenant {tenant_id}: {e}")
+            logging.exception("[tenant=%s] Tagging failed for %s: %s", tenant_id, name, e)
+            _update_status(tenant_id, target.label, {"last_error": str(e)})
 
-if __name__ == "__main__":
-    print("🚀 Daemon started")
-    run_daemon()
+    return processed
 
+
+def run_daemon() -> None:
+    """
+    Main entrypoint called by the timer trigger. Safe to import.
+    """
+    logging.info("daemon run start")
+    tenants = _get_tenant_ids()
+    if not tenants:
+        logging.warning("No tenants configured (DAEMON_TENANTS / tenants.json).")
+        return
+
+    client = _make_openai_client()
+
+    for tid in tenants:
+        try:
+            targets = _load_targets_for_tenant(tid)
+        except Exception as e:
+            logging.exception("[tenant=%s] Failed to load targets: %s", tid, e)
+            continue
+
+        if not targets:
+            logging.info("[tenant=%s] No upload targets.", tid)
+            continue
+
+        for t in targets:
+            if not t.enabled:
+                logging.info("[tenant=%s] SKIP disabled target '%s'", tid, t.label)
+                continue
+
+            _update_status(tid, t.label, {
+                "last_run": _utc_now_iso(),
+                "files_processed": 0,
+                "last_error": None,
+            })
+
+            try:
+                count = _process_target(tid, t, client)
+                _update_status(tid, t.label, {
+                    "last_success": _utc_now_iso(),
+                    "files_processed": count,
+                })
+            except Exception as e:
+                logging.exception("[tenant=%s] Target '%s' failed: %s", tid, t.label, e)
+                _update_status(tid, t.label, {"last_error": str(e)})
+
+    logging.info("daemon run end")
