@@ -41,5 +41,3 @@ doc_tagger_daemon/AzuriteConfig
 doctagger_ui_frontend/node_modules/
 doctagger_ui_frontend/dist/
 
-# Copied shared for function deploy (we sync it before publish)
-doc_tagger_daemon/shared/

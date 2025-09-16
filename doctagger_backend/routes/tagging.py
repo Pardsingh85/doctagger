@@ -1,7 +1,7 @@
 # doctagger_backend/routes/tagging.py
 from fastapi import APIRouter, File, UploadFile, Form, Depends, HTTPException
 from ..auth_jwt import require_user_jwt  # ✅ JWT-based user gate
-from shared.tagging_utils import extract_text, get_tags, parse_tags
+from doc_tagger_daemon.shared.tagging_utils import extract_text, get_tags, parse_tags
 
 router = APIRouter()
 

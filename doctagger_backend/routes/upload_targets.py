@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 from ..auth_jwt import require_admin_jwt  # ✅ JWT-based admin gate
-from shared.blob_utils import load_json_blob, write_json_blob
+from doc_tagger_daemon.shared.blob_utils import load_json_blob, write_json_blob
 
 router = APIRouter(prefix="/admin/upload-targets", tags=["Upload Targets"])
 
