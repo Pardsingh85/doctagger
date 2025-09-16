@@ -1,8 +1,8 @@
 # doctagger_backend/routes/sharepoint.py
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
 from ..auth_jwt import require_user_jwt  # ✅ JWT-based user gate
-from shared.graph_auth import get_graph_token
-from shared.blob_utils import append_log_entry, load_json_blob
+from doc_tagger_daemon.shared.graph_auth import get_graph_token
+from doc_tagger_daemon.shared.blob_utils import append_log_entry, load_json_blob
 from datetime import datetime
 import requests
 

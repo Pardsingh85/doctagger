@@ -1,7 +1,7 @@
 # doctagger_backend/routes/graph_browser.py
 from fastapi import APIRouter, Depends, HTTPException, Query
 from ..auth_jwt import require_admin_jwt  # ✅ JWT-based admin gate
-from shared.graph_auth import get_graph_token
+from doc_tagger_daemon.shared.graph_auth import get_graph_token
 import requests
 from urllib.parse import urlparse
 
