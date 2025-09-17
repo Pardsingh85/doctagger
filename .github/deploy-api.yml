@@ -1,0 +1,22 @@
+name: Deploy FastAPI (prod)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'doctagger_backend/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Optional: ensure a clean build (App Service will pip install from requirements.txt)
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: <YOUR-WEBAPP-NAME>          # e.g., doctagger-api-prod
+          package: doctagger_backend
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
