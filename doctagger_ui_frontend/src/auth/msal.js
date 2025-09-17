@@ -1,7 +1,7 @@
 // msal.js
 import { PublicClientApplication } from "@azure/msal-browser";
 
-const clientId = import.meta.env.VITE_CLIENT_APP_ID; // GUID of DocTaggerAI-Client
+const clientId = import.meta.env.VITE_MSAL_CLIENT_ID; // GUID of DocTaggerAI-Client
 const usePopup = window.location.hostname === "localhost"; // popup for localhost, redirect for SWA/prod
 
 export const loginRequest = {
