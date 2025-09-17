@@ -15,7 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare API source (code + requirements)
+      # Prepare API source (code + requirements)
+      - name: Prepare API source
         run: |
           rm -rf api_src
           mkdir api_src
@@ -31,4 +32,4 @@ jobs:
         uses: azure/webapps-deploy@v2
         with:
           app-name: doctagger-api-prod
-          package: api_src          # <— deploy SOURCE, not build/
+          package: api_src
