@@ -6,6 +6,7 @@ on:
     paths:
       - 'doctagger_backend/**'
       - 'requirements.txt'
+      - '.github/workflows/deploy-api.yml'
   workflow_dispatch:
 
 jobs:
@@ -14,22 +15,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # (optional) only ship the backend + reqs to keep the artifact small
-      - name: Prepare backend artifact
+      - name: Prepare API source (code + requirements)
         run: |
-          mkdir api_build_src
-          cp -r doctagger_backend api_build_src/
-          cp requirements.txt api_build_src/
-
-      # Build with Oryx so /antenv + startup is wired correctly for App Service
-      - name: Oryx build
-        uses: azure/appservice-build@v3
-        with:
-          platform: python
-          platform-version: '3.11'
-          source-directory: api_build_src
-          output-directory: build
-          enable-dynamic-install: true
+          rm -rf api_src
+          mkdir api_src
+          cp -r doctagger_backend api_src/
+          cp requirements.txt api_src/
 
       - name: Azure Login
         uses: azure/login@v2
@@ -40,4 +31,4 @@ jobs:
         uses: azure/webapps-deploy@v2
         with:
           app-name: doctagger-api-prod
-          package: build
+          package: api_src          # <— deploy SOURCE, not build/
