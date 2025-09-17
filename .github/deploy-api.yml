@@ -14,15 +14,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies into .python_packages
+      # (optional) only ship the backend + reqs to keep the artifact small
+      - name: Prepare backend artifact
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt -t .python_packages/lib/site-packages
+          mkdir api_build_src
+          cp -r doctagger_backend api_build_src/
+          cp requirements.txt api_build_src/
+
+      # Build with Oryx so /antenv + startup is wired correctly for App Service
+      - name: Oryx build
+        uses: azure/appservice-build@v3
+        with:
+          platform: python
+          platform-version: '3.11'
+          source-directory: api_build_src
+          output-directory: build
+          enable-dynamic-install: true
 
       - name: Azure Login
         uses: azure/login@v2
@@ -33,4 +40,4 @@ jobs:
         uses: azure/webapps-deploy@v2
         with:
           app-name: doctagger-api-prod
-          package: .
+          package: build
