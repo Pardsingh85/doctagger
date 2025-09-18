@@ -5,9 +5,9 @@ on:
     branches: [ main ]
     paths:
       - 'doctagger_backend/**'
-      - 'doc_tagger_daemon/**'     # trigger when shared code changes
+      - 'doc_tagger_daemon/**'
       - 'requirements.txt'
-      - 'startup.sh'               # trigger when startup changes
+      - 'startup.sh'
       - '.github/workflows/deploy-api.yml'
   workflow_dispatch:
 
@@ -22,10 +22,11 @@ jobs:
           rm -rf api_src
           mkdir api_src
           cp -r doctagger_backend api_src/
-          cp -r doc_tagger_daemon api_src/    # include shared package
+          cp -r doc_tagger_daemon api_src/       # include shared package
           cp requirements.txt api_src/
           cp startup.sh api_src/
           chmod +x api_src/startup.sh
+
           echo "== api_src =="
           ls -la api_src
           echo "== api_src/doc_tagger_daemon =="
