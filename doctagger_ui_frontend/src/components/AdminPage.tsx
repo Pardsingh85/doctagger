@@ -20,7 +20,7 @@ export default function AdminPage() {
     (async () => {
       try {
         const token = await getAccessToken(instance);
-        if (!token) return; // redirect in progress
+        if (!token) return; // redirect in progress.
 
         const base = (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:8000";
         const res = await fetch(`${base}/admin/feedback`, {
