@@ -1,10 +1,12 @@
 name: Deploy FastAPI API (prod)
 
+# .github/workflows/deploy-api.yml
 on:
   push:
     branches: [ main ]
     paths:
       - 'doctagger_backend/**'
+      - 'doc_tagger_daemon/**'   # <- add this
       - 'requirements.txt'
       - '.github/workflows/deploy-api.yml'
   workflow_dispatch:
@@ -15,14 +17,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Prepare API source (code + requirements)
       - name: Prepare API source
         run: |
           rm -rf api_src
           mkdir api_src
           cp -r doctagger_backend api_src/
-          cp -r doc_tagger_daemon api_src/ 
+          cp -r doc_tagger_daemon api_src/    # <- include shared code
           cp requirements.txt api_src/
+          echo "Contents of api_src:"; ls -la api_src; ls -la api_src/doc_tagger_daemon || true
 
       - name: Azure Login
         uses: azure/login@v2
