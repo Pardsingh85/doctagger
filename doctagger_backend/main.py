@@ -56,6 +56,10 @@ def me_jwt(user=Depends(require_user_jwt)):
 def admin_health(_: dict = Depends(require_admin_jwt)):
     return {"ok": True}
 
+@app.get("/health", tags=["public"])
+def health():
+    return {"status": "ok"}
+
 # Debug helper (safe to keep in dev only)
 @app.get("/debug/env")
 def debug_env():
