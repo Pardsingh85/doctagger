@@ -21,6 +21,7 @@ jobs:
           rm -rf api_src
           mkdir api_src
           cp -r doctagger_backend api_src/
+          cp -r doc_tagger_daemon api_src/ 
           cp requirements.txt api_src/
 
       - name: Azure Login
