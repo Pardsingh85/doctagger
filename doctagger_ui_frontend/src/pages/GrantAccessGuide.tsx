@@ -1,79 +1,88 @@
-import { useMemo } from "react";
+// src/pages/GrantAccessGuide.tsx
+import React from "react";
 
-export default function GrantAccessGuide() {
-  const daemonAppId = import.meta.env.VITE_DAEMON_APP_ID as string;
-  const prodCallback = `${window.location.origin}/auth/callback`;
+const GrantAccessGuide: React.FC = () => {
+  const daemonAppId = import.meta.env.VITE_DAEMON_APP_ID as string | undefined;
+  const tenantId = (import.meta.env.VITE_MSAL_TENANT_ID as string) || "common";
 
-  const adminConsentUrl = useMemo(
-    () =>
-      `https://login.microsoftonline.com/common/adminconsent?client_id=${daemonAppId}&redirect_uri=${encodeURIComponent(
-        prodCallback
-      )}&state=onboarding`,
-    [daemonAppId, prodCallback]
-  );
+  // New: dedicated redirect for admin consent (falls back to sensible default)
+  const adminConsentRedirect =
+    (import.meta.env.VITE_ADMIN_CONSENT_REDIRECT_URI as string | undefined) ||
+    `${window.location.origin}/auth/admin-consent/callback`;
 
-  const grantJson = `{
-  "roles": ["write"],
-  "grantedToIdentities": [
-    { "application": { "id": "${daemonAppId}" } }
-  ]
-}`;
+  const missing: string[] = [];
+  if (!daemonAppId) missing.push("VITE_DAEMON_APP_ID");
+  // VITE_MSAL_TENANT_ID is optional (defaults to 'common')
+
+  const handleAdminConsent = () => {
+    if (!daemonAppId) return;
+
+    const url =
+      `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/v2.0/adminconsent` +
+      `?client_id=${encodeURIComponent(daemonAppId)}` +
+      `&redirect_uri=${encodeURIComponent(adminConsentRedirect)}` +
+      `&state=doctagger_admin_consent`;
+
+    window.location.assign(url);
+  };
 
   return (
-    <div className="max-w-3xl mx-auto mt-10 p-6 bg-white border rounded shadow space-y-6">
-      <h1 className="text-2xl font-bold">Grant Access Guide</h1>
-      <p className="text-gray-600">
-        DocTagger uses <code>Sites.Selected</code>. This means we only access
-        SharePoint sites that you explicitly assign. Follow these steps:
+    <div className="mx-auto max-w-2xl px-6 py-10">
+      <h1 className="text-2xl font-semibold mb-4">Grant SharePoint Access</h1>
+      <p className="text-sm text-gray-600 mb-6">
+        An administrator needs to grant the DocTagger <b>daemon</b> permission to
+        access SharePoint via Microsoft Graph. This is a one-time step per tenant.
       </p>
 
-      {/* Step 1 */}
-      <section>
-        <h2 className="font-semibold mb-2">Step 1 — Admin Consent</h2>
-        <a
-          href={adminConsentUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Open Admin Consent
-        </a>
-        <p className="text-xs mt-2">
-          API App ID: <code>{daemonAppId || "MISSING VITE_DAEMON_APP_ID"}</code>
-        </p>
-      </section>
+      <div className="rounded-2xl border p-4 mb-6">
+        <h2 className="font-medium mb-2">What this does</h2>
+        <ul className="list-disc pl-6 text-sm text-gray-700 space-y-1">
+          <li>Opens the Microsoft Entra admin consent screen.</li>
+          <li>Uses the daemon app ID to request permissions (Sites.Selected).</li>
+          <li>Returns to our app at <code className="px-1 py-0.5 bg-gray-100 rounded">{adminConsentRedirect}</code>.</li>
+        </ul>
+      </div>
 
-      {/* Step 2 */}
-      <section>
-        <h2 className="font-semibold mb-2">
-          Step 2 — Assign to a SharePoint site
-        </h2>
-        <p className="text-sm text-gray-600 mb-2">
-          Use Microsoft Graph Explorer or CLI.
-        </p>
-        <pre className="bg-gray-900 text-green-200 p-3 rounded text-sm overflow-x-auto">
-{`# Find site ID
-GET https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site-name}?$select=id,webUrl
+      {missing.length > 0 ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 mb-6 text-sm text-red-800">
+          <b>Missing configuration:</b> {missing.join(", ")}.
+          <div className="mt-2">
+            Set these in your build environment and redeploy.
+          </div>
+        </div>
+      ) : null}
 
-# Grant DocTagger write access
-POST https://graph.microsoft.com/v1.0/sites/{siteId}/permissions
-Content-Type: application/json
+      <div className="grid gap-2 text-sm">
+        <div>
+          <span className="font-medium">Tenant:</span>{" "}
+          <code className="px-1 py-0.5 bg-gray-100 rounded">{tenantId}</code>
+        </div>
+        <div>
+          <span className="font-medium">Daemon App ID:</span>{" "}
+          <code className="px-1 py-0.5 bg-gray-100 rounded">{daemonAppId}</code>
+        </div>
+        <div>
+          <span className="font-medium">Admin Consent Redirect URI:</span>{" "}
+          <code className="px-1 py-0.5 bg-gray-100 rounded break-all">
+            {adminConsentRedirect}
+          </code>
+        </div>
+      </div>
 
-${grantJson}
+      <button
+        onClick={handleAdminConsent}
+        disabled={missing.length > 0}
+        className="mt-6 inline-flex items-center rounded-xl px-4 py-2 border shadow-sm hover:shadow transition disabled:opacity-50"
+      >
+        Open Admin Consent
+      </button>
 
-# Verify
-GET https://graph.microsoft.com/v1.0/sites/{siteId}/permissions`}
-        </pre>
-      </section>
-
-      {/* Step 3 */}
-      <section>
-        <h2 className="font-semibold mb-2">Step 3 — Verify in DocTagger</h2>
-        <p className="text-sm text-gray-600">
-          Once access is granted, DocTagger can only see those sites. Any other
-          site will return a 403 error.
-        </p>
-      </section>
+      <p className="text-xs text-gray-500 mt-4">
+        You’ll be redirected to Microsoft and then returned to{" "}
+        <code className="px-1 py-0.5 bg-gray-100 rounded">/auth/admin-consent/callback</code>.
+      </p>
     </div>
   );
-}
+};
+
+export default GrantAccessGuide;
