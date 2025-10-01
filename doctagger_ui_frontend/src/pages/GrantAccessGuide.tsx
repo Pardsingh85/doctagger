@@ -2,23 +2,29 @@
 import React from "react";
 
 const GrantAccessGuide: React.FC = () => {
+  // Required: daemon app (the app that has Sites.Selected etc.)
   const daemonAppId = import.meta.env.VITE_DAEMON_APP_ID as string | undefined;
-  const tenantId = (import.meta.env.VITE_MSAL_TENANT_ID as string) || "common";
 
-  // New: dedicated redirect for admin consent (falls back to sensible default)
+  // Admin consent cannot use /common or /consumers. Use your tenant GUID/domain,
+  // or default to /organizations when unset/common/consumers.
+  const rawTenant = (import.meta.env.VITE_MSAL_TENANT_ID as string) || "organizations";
+  const tenantSegment = ["common", "consumers"].includes(rawTenant.toLowerCase())
+    ? "organizations"
+    : rawTenant;
+
+  // Redirect URI for admin consent (must also be registered on the *daemon* app)
   const adminConsentRedirect =
     (import.meta.env.VITE_ADMIN_CONSENT_REDIRECT_URI as string | undefined) ||
     `${window.location.origin}/auth/admin-consent/callback`;
 
   const missing: string[] = [];
   if (!daemonAppId) missing.push("VITE_DAEMON_APP_ID");
-  // VITE_MSAL_TENANT_ID is optional (defaults to 'common')
 
   const handleAdminConsent = () => {
     if (!daemonAppId) return;
 
     const url =
-      `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/v2.0/adminconsent` +
+      `https://login.microsoftonline.com/${encodeURIComponent(tenantSegment)}/adminconsent` +
       `?client_id=${encodeURIComponent(daemonAppId)}` +
       `&redirect_uri=${encodeURIComponent(adminConsentRedirect)}` +
       `&state=doctagger_admin_consent`;
@@ -30,36 +36,40 @@ const GrantAccessGuide: React.FC = () => {
     <div className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="text-2xl font-semibold mb-4">Grant SharePoint Access</h1>
       <p className="text-sm text-gray-600 mb-6">
-        An administrator needs to grant the DocTagger <b>daemon</b> permission to
-        access SharePoint via Microsoft Graph. This is a one-time step per tenant.
+        An administrator needs to grant the DocTagger <b>daemon</b> permission to access SharePoint via Microsoft Graph.
+        This is a one-time step per tenant.
       </p>
 
       <div className="rounded-2xl border p-4 mb-6">
         <h2 className="font-medium mb-2">What this does</h2>
         <ul className="list-disc pl-6 text-sm text-gray-700 space-y-1">
           <li>Opens the Microsoft Entra admin consent screen.</li>
-          <li>Uses the daemon app ID to request permissions (Sites.Selected).</li>
-          <li>Returns to our app at <code className="px-1 py-0.5 bg-gray-100 rounded">{adminConsentRedirect}</code>.</li>
+          <li>Uses the daemon app ID to request permissions (e.g., <code>Sites.Selected</code>).</li>
+          <li>
+            Returns to{" "}
+            <code className="px-1 py-0.5 bg-gray-100 rounded break-all">
+              {adminConsentRedirect}
+            </code>
+            .
+          </li>
         </ul>
       </div>
 
       {missing.length > 0 ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 mb-6 text-sm text-red-800">
           <b>Missing configuration:</b> {missing.join(", ")}.
-          <div className="mt-2">
-            Set these in your build environment and redeploy.
-          </div>
+          <div className="mt-2">Set these in your build environment and redeploy.</div>
         </div>
       ) : null}
 
       <div className="grid gap-2 text-sm">
         <div>
-          <span className="font-medium">Tenant:</span>{" "}
-          <code className="px-1 py-0.5 bg-gray-100 rounded">{tenantId}</code>
+          <span className="font-medium">Tenant segment:</span>{" "}
+          <code className="px-1 py-0.5 bg-gray-100 rounded">{tenantSegment}</code>
         </div>
         <div>
           <span className="font-medium">Daemon App ID:</span>{" "}
-          <code className="px-1 py-0.5 bg-gray-100 rounded">{daemonAppId}</code>
+          <code className="px-1 py-0.5 bg-gray-100 rounded break-all">{daemonAppId || "—"}</code>
         </div>
         <div>
           <span className="font-medium">Admin Consent Redirect URI:</span>{" "}
