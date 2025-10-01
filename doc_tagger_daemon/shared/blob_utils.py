@@ -2,7 +2,7 @@
 from __future__ import annotations
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from .secrets import get_secret
 
@@ -57,7 +57,7 @@ def load_json_blob(tenant_id: str, blob_name: str):
 
 def write_json_blob(tenant_id: str, blob_name: str, data):
     blob = get_blob_client(tenant_id, blob_name)
-    blob.upload_blob(json.dumps(data, indent=2), overwrite=True)
+    blob.upload_blob(json.dumps(data, indent=2, ensure_ascii=False), overwrite=True)
 
 def append_log_entry(tenant_id: str, entry: dict, blob_name: str = "upload_log.json"):
     logs = load_json_blob(tenant_id, blob_name) or []
@@ -66,13 +66,42 @@ def append_log_entry(tenant_id: str, entry: dict, blob_name: str = "upload_log.j
     logs.append(entry)
     write_json_blob(tenant_id, blob_name, logs)
 
+# ---------- NEW: simple, tenant-level status (for dashboard cards) ----------
+
+def _now_utc_iso_z() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+def write_daemon_status(tenant_id: str, *, processed: int, tagged: int, failed: int, last_error: Optional[str]):
+    """
+    Overwrites daemon_status.json at tenant root with the simple shape:
+    {
+      "lastRunUtc": "...",
+      "heartbeatUtc": "...",
+      "totals": { "processed": X, "tagged": Y, "failed": Z },
+      "lastError": "..." | null
+    }
+    """
+    status = {
+        "lastRunUtc": _now_utc_iso_z(),
+        "heartbeatUtc": _now_utc_iso_z(),
+        "totals": {"processed": int(processed), "tagged": int(tagged), "failed": int(failed)},
+        "lastError": (last_error[:2000] if isinstance(last_error, str) else None),
+    }
+    write_json_blob(tenant_id, "daemon_status.json", status)
+
+# ---------- Existing per-target status (moved to a separate file) -----------
+
 def update_daemon_status(tenant_id: str, label: str, update: dict):
-    filename = "daemon_status.json"
+    """
+    Maintains per-target status in daemon_targets_status.json.
+    (Kept for compatibility with current caller sites.)
+    """
+    filename = "daemon_targets_status.json"
     data = load_json_blob(tenant_id, filename) or {}
     if tenant_id not in data:
         data[tenant_id] = {}
     if label not in data[tenant_id]:
         data[tenant_id][label] = {}
-    data[tenant_id][label].update(update)
-    data[tenant_id][label]["last_updated"] = datetime.utcnow().isoformat() + "Z"
+    data[tenant_id][label].update(update or {})
+    data[tenant_id][label]["last_updated"] = _now_utc_iso_z()
     write_json_blob(tenant_id, filename, data)
